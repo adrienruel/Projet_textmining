@@ -21,7 +21,7 @@ for(i in 1:n){
       
       category[x] <- "NULL"
       target[x] <- "NULL"
-      polarity[x] <- "NULL"
+      polarity[x] <- "neutral"
       
       
     }else{
@@ -41,3 +41,29 @@ for(i in 1:n){
 df <- cbind(phrases,category,target,polarity,index)
 df <- as.data.frame(df)
 df$phrases <- lapply(df$phrases, tolower)
+df$phrases <- lapply(df$phrases, removePunctuation)
+
+
+Corp_tout <- Corpus(VectorSource(df$phrases))
+Corp_positive <- Corpus(VectorSource(df$phrases[which(df$polarity == "positive")]))
+Corp_negative <- Corpus(VectorSource(df$phrases[which(df$polarity == "negative")]))
+
+
+Corp_tout <- tm_map(Corp_tout, removeWords, stopwords("english"))
+Corp_positive <-  tm_map(Corp_positive, removeWords, stopwords("english"))
+Corp_negative <-  tm_map(Corp_negative, removeWords, stopwords("english"))
+
+wordfreq <- function(data){
+myTdm <- as.matrix(TermDocumentMatrix(data))
+FreqMat <- data.frame(ST = rownames(myTdm), 
+                      Freq = rowSums(myTdm), 
+                      row.names = NULL)
+
+return(FreqMat)
+}
+
+freq_mot_tout <- wordfreq(Corp_tout)
+freq_mot_positive <- wordfreq(Corp_positive)
+freq_mot_negative <- wordfreq(Corp_negative)
+
+
