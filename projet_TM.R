@@ -39,4 +39,5 @@ for(i in 1:n){
 
 
 df <- cbind(phrases,category,target,polarity,index)
-
+df <- as.data.frame(df)
+df$phrases <- lapply(df$phrases, tolower)
