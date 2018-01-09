@@ -3,6 +3,7 @@ require(tm)
 require(SnowballC)
 data <- xmlParse("D:/aruel/Téléchargements/train_2017.xml")
 
+#création des vecteurs pour stocker les phrases et les polarités
 xml_data <- xmlToList(data)
 phrases <- vector()
 category <- vector()
@@ -10,10 +11,10 @@ target <- vector()
 polarity <- vector()
 index <- vector()
 textes <- vector()
-polarite <- vector()
 x <- 1
 n <- length(xml_data)
 
+#certaines phrases n'ont pas d'opinion, nous les estimerons à neutre
 for(i in 1:n){
   
   m <- length(xml_data[i]$Review$sentences)
@@ -39,25 +40,31 @@ for(i in 1:n){
   
 }
 
-
+#recupération d'une liste de mots outils
 mots_outils <- read.table("C:/Users/aruel/Desktop/mot_outils.txt")
 mots_outils <- as.vector(mots_outils)
+#on nettoie cette liste, puisqu'il y a des éléments de ponctuation
 mots_outils <- lapply(mots_outils,as.character)
 mots_outils <- lapply(mots_outils, removePunctuation)
 
 
 df <- cbind(phrases,category,target,polarity,index)
 df <- as.data.frame(df)
+#on met les phrases en miniscules
 df$phrases <- lapply(df$phrases, tolower)
+#on enlève la ponctuation
 df$phrases <- lapply(df$phrases, removePunctuation)
+#on enlève les nombres
 df$phrases <- lapply(df$phrases, removeNumbers)
+#on enlève les mots-outils de notre liste et de la liste fournie par R
 df$phrases <- as.character(df$phrases)
 df$phrases <- removeWords(df$phrases, stopwords("english"))
 df$phrases <- removeWords(df$phrases, mots_outils)
+#on utilise l'algorithme de stemming de porter 
 for(i in 1:length(df$phrases)){
   df$phrases[i] <- stemDocument(df$phrases[i], language = "english")
 }
-
+#On enlève les polarités neutres
 df <- df[which(df$polarity != "neutral"),]
 df$polarity <- as.character(df$polarity)
 df$polarity  <- as.factor(df$polarity)
@@ -66,18 +73,14 @@ df$polarity  <- as.factor(df$polarity)
 
 
 
-
+#on créé un corpus pour les phrases positives et un pour les phrases négatives
 Corp_tout <- Corpus(VectorSource(df$phrases))
 Corp_positive <- Corpus(VectorSource(df$phrases[which(df$polarity == "positive")]))
 Corp_negative <- Corpus(VectorSource(df$phrases[which(df$polarity == "negative")]))
 
 
-Corp_tout <- tm_map(Corp_tout, removeWords, stopwords("english"))
-Corp_positive <-  tm_map(Corp_positive, removeWords, stopwords("english"))
-Corp_negative <-  tm_map(Corp_negative, removeWords, stopwords("english"))
 
-
-
+#fonction pour calculer la fréquences de chaque mot dans un corpus
 wordfreq <- function(data){
   myTdm <- as.matrix(TermDocumentMatrix(data))
   FreqMat <- data.frame(ST = rownames(myTdm), 
@@ -87,17 +90,20 @@ wordfreq <- function(data){
   return(FreqMat)
 }
 
-
+#on calcule ensuite les fréquences des mots pour les corpus
 freq_mot_tout <- wordfreq(Corp_tout)
 freq_mot_positive <- wordfreq(Corp_positive)
 freq_mot_negative <- wordfreq(Corp_negative)
 
+#on ramène cette fréquence à la taille du corpus
 occurence_positive = freq_mot_positive$Freq/length(Corp_positive)
 occurence_negative = freq_mot_negative$Freq/length(Corp_negative)
 
 freq_mot_positive <- cbind(freq_mot_positive, occurence_positive)
 freq_mot_negative <- cbind(freq_mot_negative, occurence_negative)
 
+#on va voir, pour les mots qui apparaissent dans les 2 corpus
+#qu'elles sont les mots qui apparaisse beaucoup plus dans un corpus que dans l'autre
 difference <- vector()
 mot_communs <- intersect(freq_mot_negative$ST, freq_mot_positive$ST)
 for(i in 1:length(mot_communs)){
@@ -110,8 +116,9 @@ for(i in 1:length(mot_communs)){
   
 }
 
-boxplot(difference[order(difference)])
+#boxplot(difference[order(difference)])
 
+#on met le seuil à 2, ça veut dire que l'on garde les mots qui apparaissent 2 fois plus dans un corpus que dans l'autre
 x <- names(difference[which(difference < 5 & difference > 0.2)])
 df$phrases <- removeWords(df$phrases, x)
 
@@ -119,50 +126,64 @@ df$phrases <- removeWords(df$phrases, x)
 #neg <- which(df$polarity == "negative")
 
 
-#x1 <- sample(pos, size = 200)
-#x2 <- sample(neg, size = 200)
+#x1 <- sample(pos, size = 400)
+#x2 <- sample(neg, size = 400)
+
+#x <- c(x1,x2)
+
+x <- sample(1:1630, 1000)
 require(RTextTools)
-#trace("create_matrix",edit=T)
-dtMatrix <- create_matrix(df$phrases)
+#il y a une erreur dans la function create_matrix
+#il y a une majuscule à Acronym qu'il faut enlever ligne 42
+trace("create_matrix",edit=T)
 
+#création de la matrice documents/termes pour l'échantillon train
+dtMatrix <- create_matrix(df$phrases[1:700])
 
+#container : structure de données pour utiliser les fonctions d'après
+#on lui donne la matrice, la variable à estimer et des paramètres complémentaires
 
+#container <- create_container(dtMatrix, df$polarity, trainSize = 1:length(x), virgin = FALSE)
 container <- create_container(dtMatrix, df$polarity, trainSize = 1:700, virgin = FALSE)
-
-# train a SVM Model
+# on entraine le modèle
 model <- train_models(container,"SVM",kernel = "linear", cost = 1)
-
+#échantillon test
 predictionData <- df$phrases[701:1630]
+#on créé la matrice pour l'échantillon test, mais en gardant les colonnes de la première matrice
 predMatrix <- create_matrix(predictionData, originalMatrix=dtMatrix)
 
-predSize = length(predictionData)
+predSize <-  length(predictionData)
 predictionContainer <- create_container(predMatrix, labels=rep(0,predSize), testSize=1:predSize, virgin=FALSE)
 
+#on calcule les valeurs
 results <- classify_models(predictionContainer, model)
-#res <- ifelse(results$SVM_PROB < 0.80, 1, results$SVM_LABEL)
-
+#on met un seuil pour le terme de neutralité
+res <- ifelse(results$SVM_PROB > 0.79 & results$SVM_PROB < 0.80 , "neutral", results$SVM_LABEL)
+#matrice de confusion
 tab <- table(results$SVM_LABEL, df$polarity[701:1630])
 
-#results$SVM_PROB[which(results$SVM_LABEL != df$polarity[701:1630])]
-#tab <- table(res, df$polarity[701:1630])
+results$SVM_PROB[which(results$SVM_LABEL != df$polarity[701:1630])]
+tab <- table(res, df$polarity[701:1630])
 tab
 
-
-sum(diag(tab))/sum(tab)
-
-
+#taux de réussité
+sum(diag(tab[-3,]))/sum(tab[-3,])
 
 
-library(RWeka) # this library is needed for NGramTokenizer
+
+#on réitère les mêmes étapes, mais la dtm comprend maintenant des ngrams
+library(RWeka) 
 
 texts <- df$phrases
+
+#on définit les ngrams possible, ici allant de 1 à 3
 TrigramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 1, max = 3))
 dtm <- DocumentTermMatrix(Corpus(VectorSource(texts)),
                           control=list(
                             weighting = weightTf,
                             tokenize = TrigramTokenizer))
 
-View(as.matrix(dtm))
+#View(as.matrix(dtm))
 container <- create_container(dtm, df$polarity, virgin=F,trainSize = 1:700)
 models <- train_models(container, "SVM", kernel = "linear", cost = 1)
 
