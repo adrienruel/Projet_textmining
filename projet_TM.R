@@ -58,8 +58,8 @@ df$phrases <- lapply(df$phrases, removePunctuation)
 df$phrases <- lapply(df$phrases, removeNumbers)
 #on enlève les mots-outils de notre liste et de la liste fournie par R
 df$phrases <- as.character(df$phrases)
-df$phrases <- removeWords(df$phrases, stopwords("english"))
-df$phrases <- removeWords(df$phrases, mots_outils)
+#df$phrases <- removeWords(df$phrases, stopwords("english"))
+#df$phrases <- removeWords(df$phrases, mots_outils$V1)
 #on utilise l'algorithme de stemming de porter 
 for(i in 1:length(df$phrases)){
   df$phrases[i] <- stemDocument(df$phrases[i], language = "english")
@@ -95,6 +95,21 @@ freq_mot_tout <- wordfreq(Corp_tout)
 freq_mot_positive <- wordfreq(Corp_positive)
 freq_mot_negative <- wordfreq(Corp_negative)
 
+freq_mot_positive <- freq_mot_positive[order(freq_mot_positive$Freq, decreasing = T),]
+freq_mot_negative <- freq_mot_negative[order(freq_mot_negative$Freq, decreasing = T),]
+freq_mot_tout <- freq_mot_tout[order(freq_mot_tout$Freq, decreasing = T),]
+
+barplot(freq_mot_positive$Freq[1:10], names.arg = freq_mot_positive$ST[1:10])
+
+barplot(freq_mot_negative$Freq[1:10], names.arg = freq_mot_negative$ST[1:10])
+
+barplot(freq_mot_tout$Freq[1:10], names.arg = freq_mot_tout$ST[1:10])
+
+wordcloud::wordcloud(freq_mot_tout$ST, max.words = 100, freq = freq_mot_tout$Freq)
+wordcloud::wordcloud(freq_mot_positive$ST, max.words = 100, freq = freq_mot_positive$Freq)
+  
+wordcloud::wordcloud(freq_mot_negative$ST, max.words = 100, freq = freq_mot_negative$Freq)
+
 #on ramène cette fréquence à la taille du corpus
 occurence_positive = freq_mot_positive$Freq/length(Corp_positive)
 occurence_negative = freq_mot_negative$Freq/length(Corp_negative)
@@ -118,37 +133,31 @@ for(i in 1:length(mot_communs)){
 
 #boxplot(difference[order(difference)])
 
-#on met le seuil à 2, ça veut dire que l'on garde les mots qui apparaissent 2 fois plus dans un corpus que dans l'autre
-x <- names(difference[which(difference < 5 & difference > 0.2)])
+#on met le seuil à 3, ça veut dire que l'on garde les mots qui apparaissent 3 fois plus dans un corpus que dans l'autre
+x <- names(difference[which(difference < 3 & difference > 0.3)])
 df$phrases <- removeWords(df$phrases, x)
 
-#pos <- which(df$polarity == "positive")
-#neg <- which(df$polarity == "negative")
-
-
-#x1 <- sample(pos, size = 400)
-#x2 <- sample(neg, size = 400)
-
-#x <- c(x1,x2)
-
-x <- sample(1:1630, 1000)
+#on mélange les phrases pour modifier l'échantillon test et train à chaque itération
+df <- df[sample(nrow(df)),]
 require(RTextTools)
 #il y a une erreur dans la function create_matrix
-#il y a une majuscule à Acronym qu'il faut enlever ligne 42
+#il y a une majuscule à Acronym qu'il faut enlever ligne 42 à l'aide de la commande suivante
 trace("create_matrix",edit=T)
 
-#création de la matrice documents/termes pour l'échantillon train
-dtMatrix <- create_matrix(df$phrases[1:700])
+#création de la matrice documents/termes pour l'échantillon train (700 phrases)
+dtMatrix <- create_matrix(df$phrases[1:1300])
 
 #container : structure de données pour utiliser les fonctions d'après
 #on lui donne la matrice, la variable à estimer et des paramètres complémentaires
 
 #container <- create_container(dtMatrix, df$polarity, trainSize = 1:length(x), virgin = FALSE)
-container <- create_container(dtMatrix, df$polarity, trainSize = 1:700, virgin = FALSE)
+container <- create_container(dtMatrix, df$polarity, trainSize = 1:1300, virgin = FALSE)
 # on entraine le modèle
-model <- train_models(container,"SVM",kernel = "linear", cost = 1)
+#le paramètre kernel correspond au type de noyau
+# linear, radial pour gaussien, sigmoid et polynomial 
+model <- train_model(container,"SVM",kernel = "linear", cost = 1)
 #échantillon test
-predictionData <- df$phrases[701:1630]
+predictionData <- df$phrases[1301:1630]
 #on créé la matrice pour l'échantillon test, mais en gardant les colonnes de la première matrice
 predMatrix <- create_matrix(predictionData, originalMatrix=dtMatrix)
 
@@ -156,24 +165,33 @@ predSize <-  length(predictionData)
 predictionContainer <- create_container(predMatrix, labels=rep(0,predSize), testSize=1:predSize, virgin=FALSE)
 
 #on calcule les valeurs
-results <- classify_models(predictionContainer, model)
+results <- classify_model(predictionContainer, model)
 #on met un seuil pour le terme de neutralité
-res <- ifelse(results$SVM_PROB > 0.79 & results$SVM_PROB < 0.80 , "neutral", results$SVM_LABEL)
-#matrice de confusion
-tab <- table(results$SVM_LABEL, df$polarity[701:1630])
+#ici on regarde la valeur que prend la probabilité si aucun spécial n'est dans la phrase
+#si on obtient cette probabilité, on dit que la phrase est neutre
+nuls <- which(rowSums(as.matrix(predMatrix)) == 0)
 
-results$SVM_PROB[which(results$SVM_LABEL != df$polarity[701:1630])]
-tab <- table(res, df$polarity[701:1630])
+res <- ifelse(results$SVM_PROB == results$SVM_PROB[nuls[1]] , "neutral", results$SVM_LABEL)
+res <- ifelse(res == "1", "negative", ifelse(res == "2", "positive", "neutral"))
+#matrice de confusion
+tab <- table(results$SVM_LABEL, df$polarity[1301:1630])
+
+results$SVM_PROB[which(results$SVM_LABEL != df$polarity[1301:1630])]
+tab <- table(res, df$polarity[1301:1630])
 tab
 
-#taux de réussité
-sum(diag(tab[-3,]))/sum(tab[-3,])
+#taux de réussite
+sum(diag(tab[-2,]))/sum(tab[-2,])
+
+
+
+
+
 
 
 
 #on réitère les mêmes étapes, mais la dtm comprend maintenant des ngrams
 library(RWeka) 
-
 texts <- df$phrases
 
 #on définit les ngrams possible, ici allant de 1 à 3
