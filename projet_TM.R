@@ -150,7 +150,6 @@ dtMatrix <- create_matrix(df$phrases[1:1300])
 #container : structure de données pour utiliser les fonctions d'après
 #on lui donne la matrice, la variable à estimer et des paramètres complémentaires
 
-#container <- create_container(dtMatrix, df$polarity, trainSize = 1:length(x), virgin = FALSE)
 container <- create_container(dtMatrix, df$polarity, trainSize = 1:1300, virgin = FALSE)
 # on entraine le modèle
 #le paramètre kernel correspond au type de noyau
