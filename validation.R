@@ -5,24 +5,24 @@
 
 
 
-validation <- function(textes, x1 = 3){
+validation <- function(phrases_tests, x1 = 3){
   #on nettoie les phrases test
-  textes <- lapply(textes, tolower)
+  phrases_tests <- lapply(phrases_tests, tolower)
   #on enlève la ponctuation
-  textes <- lapply(textes, removePunctuation)
+  phrases_tests <- lapply(phrases_tests, removePunctuation)
   #on enlève les nombres
-  textes <- lapply(textes, removeNumbers)
+  phrases_tests <- lapply(phrases_tests, removeNumbers)
   #on enlève les mots-outils de notre liste et de la liste fournie par R
-  textes <- as.character(textes)
-  for(i in 1:length(textes)){
-    textes[i] <- stemDocument(textes, language = "english")
+  phrases_tests <- as.character(phrases_tests)
+  for(i in 1:length(phrases_tests)){
+    phrases_tests[i] <- stemDocument(phrases_tests[i], language = "english")
   }
   
   
   
   #on met le seuil à 3, ça veut dire que l'on garde les mots qui apparaissent 3 fois plus dans un corpus que dans l'autre
   x <- names(difference[which(difference < x1 & difference > 1/x1)])
-  textes <- removeWords(textes, x)
+  phrases_tests <- removeWords(phrases_tests, x)
   
   
   
@@ -34,7 +34,7 @@ validation <- function(textes, x1 = 3){
   # linear, radial pour gaussien, sigmoid et polynomial 
   model <- train_model(container,"SVM",kernel = "linear", cost = 1)
   #échantillon test
-  predictionData <- textes
+  predictionData <- phrases_tests
   #on créé la matrice pour l'échantillon test, mais en gardant les colonnes de la première matrice
   predMatrix <- create_matrix(predictionData, originalMatrix=dtMatrix)
   
